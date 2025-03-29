@@ -1,3 +1,5 @@
+# Adicione isto no topo com os outros imports
+import requests  # ← Importação faltando
 import discord
 from discord.ext import commands
 from googleapiclient.discovery import build
@@ -32,39 +34,38 @@ def duckduckgo_search(query, num_results=50):
             'no_redirect': 1,
             't': 'discord_bot'
         }
-        response = requests.get(os.getenv('DDG_API_URL'), params=params)
-        response.raise_for_status()
-        data = response.json()
         
+        response = requests.get('https://api.duckduckgo.com/', params=params)  # URL fixa
+        response.raise_for_status()
+        
+        data = response.json()
         results = []
+        
         for item in data.get('RelatedTopics', []):
             if 'FirstURL' in item:
                 results.append({
-                    'title': item.get('Text', 'Sem título'),
+                    'title': item.get('Text', 'Sem título')[:256],  # Limite do Discord
                     'link': item['FirstURL']
                 })
-            if len(results) >= num_results:
-                break
+                if len(results) >= num_results:
+                    break
+                    
         return results
+        
     except Exception as e:
-        print(f"Erro no DuckDuckGo: {e}")
+        print(f"Erro no DuckDuckGo: {str(e)[:200]}")  # Log encurtado
         return []
-
-def handle_google_error(e):
-    if "Quota exceeded" in str(e):
-        print("Cota do Google excedida! Usando fallback...")
-        return True
-    return False
 
 def perform_search(query, num_results=50):
     # Tenta Google primeiro
     try:
         GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
         CUSTOM_SEARCH_ENGINE_ID = os.getenv('CUSTOM_SEARCH_ENGINE_ID')
-        service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
         
+        service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
         results = []
         start_index = 1
+        
         while len(results) < num_results:
             response = service.cse().list(
                 q=query,
@@ -79,20 +80,15 @@ def perform_search(query, num_results=50):
                 
             results.extend(items)
             start_index += len(items)
+            
         return results
     
     except Exception as e:
-        if handle_google_error(e):
-            # Fallback 1: DuckDuckGo
-            ddg_results = duckduckgo_search(query, num_results)
-            if ddg_results:
-                return ddg_results
+        if "Quota exceeded" in str(e):
+            print("Usando DuckDuckGo como fallback...")
+            return duckduckgo_search(query, num_results)
             
-            # Fallback 2: Adicione aqui outros serviços
-            # bing_results = bing_search(query, num_results)
-            # return bing_results
-            
-        print(f"Erro geral na busca: {e}")
+        print(f"Erro na busca: {e}")
         return []
 
 
@@ -102,7 +98,8 @@ def home():
     return "O bot está vivo!"
 
 def run():
-  app.run(host='0.0.0.0', port=8080)  # Porta 8080 é obrigatória no Replit
+    port = int(os.environ.get("PORT", 8080))  # ← Usando variável do Railway
+    app.run(host='0.0.0.0', port=port)
 
 
 def keep_alive():
@@ -114,37 +111,6 @@ def keep_alive():
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
-
-
-# Função para buscar no Google
-def google_search(query, num_results=50):
-  GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')  # Adicione esta linha
-  CUSTOM_SEARCH_ENGINE_ID = os.getenv('CUSTOM_SEARCH_ENGINE_ID')  # E esta
-  service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
-  # ... restante do código ...
-  results = []
-  start_index = 1
-
-  while len(results) < num_results:
-    try:
-      response = service.cse().list(q=query,
-                                    cx=CUSTOM_SEARCH_ENGINE_ID,
-                                    num=min(10, num_results - len(results)),
-                                    start=start_index).execute()
-      items = response.get('items', [])
-      if not items:
-        break
-      results.extend(items)
-      start_index += len(items)
-    except Exception as e:
-      print(f"Erro na busca: {e}")
-      break
-
-  return results
-
-
-# Dicionário para armazenar buscas ativas
-active_searches = {}
 
 
 # ... (código anterior permanece igual)
