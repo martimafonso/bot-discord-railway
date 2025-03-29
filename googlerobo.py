@@ -36,6 +36,84 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
 
+# ... (imports e configurações anteriores permanecem iguais)
+
+# Adicione novas variáveis de ambiente no seu .env:
+# DDG_API_URL = "https://api.duckduckgo.com/"
+# BING_API_KEY = "sua_chave_bing"
+
+def duckduckgo_search(query, num_results=50):
+    try:
+        params = {
+            'q': query,
+            'format': 'json',
+            'no_html': 1,
+            'no_redirect': 1,
+            't': 'discord_bot'
+        }
+        response = requests.get(os.getenv('DDG_API_URL'), params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = []
+        for item in data.get('RelatedTopics', []):
+            if 'FirstURL' in item:
+                results.append({
+                    'title': item.get('Text', 'Sem título'),
+                    'link': item['FirstURL']
+                })
+            if len(results) >= num_results:
+                break
+        return results
+    except Exception as e:
+        print(f"Erro no DuckDuckGo: {e}")
+        return []
+
+def handle_google_error(e):
+    if "Quota exceeded" in str(e):
+        print("Cota do Google excedida! Usando fallback...")
+        return True
+    return False
+
+def perform_search(query, num_results=50):
+    # Tenta Google primeiro
+    try:
+        GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+        CUSTOM_SEARCH_ENGINE_ID = os.getenv('CUSTOM_SEARCH_ENGINE_ID')
+        service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+        
+        results = []
+        start_index = 1
+        while len(results) < num_results:
+            response = service.cse().list(
+                q=query,
+                cx=CUSTOM_SEARCH_ENGINE_ID,
+                num=min(10, num_results - len(results)),
+                start=start_index
+            ).execute()
+            
+            items = response.get('items', [])
+            if not items:
+                break
+                
+            results.extend(items)
+            start_index += len(items)
+        return results
+    
+    except Exception as e:
+        if handle_google_error(e):
+            # Fallback 1: DuckDuckGo
+            ddg_results = duckduckgo_search(query, num_results)
+            if ddg_results:
+                return ddg_results
+            
+            # Fallback 2: Adicione aqui outros serviços
+            # bing_results = bing_search(query, num_results)
+            # return bing_results
+            
+        print(f"Erro geral na busca: {e}")
+        return []
+
 
 # Função para buscar no Google
 def google_search(query, num_results=50):
@@ -68,14 +146,18 @@ def google_search(query, num_results=50):
 active_searches = {}
 
 
+# Modifique o comando para usar a nova função:
 @bot.command(name="google")
 async def google(ctx, *, query: str):
-  results = google_search(query, num_results=50)
-  if not results:
-    await ctx.send("Nenhum resultado encontrado.")
-    return
-
-  current_index = 0
+    results = perform_search(query, num_results=50)  # Função modificada
+    
+    if not results:
+        await ctx.send("🚨 Todas as fontes de pesquisa falharam ou não retornaram resultados!")
+        return
+    
+    # Restante do código permanece igual...
+    current_index = 0
+    # ... (código de paginação e embed)
 
   # Função para criar o embed com base no índice atual
   def create_embed(index):
