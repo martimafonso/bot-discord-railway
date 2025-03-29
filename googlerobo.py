@@ -146,99 +146,100 @@ def google_search(query, num_results=50):
 active_searches = {}
 
 
-# Modifique o comando para usar a nova função:
+# ... (código anterior permanece igual)
+
 @bot.command(name="google")
 async def google(ctx, *, query: str):
-    results = perform_search(query, num_results=50)  # Função modificada
+    results = perform_search(query, num_results=50)
     
     if not results:
         await ctx.send("🚨 Todas as fontes de pesquisa falharam ou não retornaram resultados!")
         return
-    
-    # Restante do código permanece igual...
+
     current_index = 0
-    # ... (código de paginação e embed)
 
-  # Função para criar o embed com base no índice atual
-  def create_embed(index):
-    embed = discord.Embed(
-        title=
-        f"Resultados {index * 5 + 1}-{min((index + 1) * 5, len(results))}/{len(results)}",
-        color=discord.Color.blue())
-    for i in range(index * 5, min((index + 1) * 5, len(results))):
-      result = results[i]
-      embed.add_field(name=result['title'], value=result['link'], inline=False)
-    return embed
+    # Função para criar o embed com base no índice atual (CORRIGIDO)
+    def create_embed(index):
+        embed = discord.Embed(
+            title=f"Resultados {index * 5 + 1}-{min((index + 1) * 5, len(results))}/{len(results)}",
+            color=discord.Color.blue()
+        )
+        for i in range(index * 5, min((index + 1) * 5, len(results))):
+            result = results[i]
+            embed.add_field(name=result['title'], value=result['link'], inline=False)
+        return embed
 
-  message = await ctx.send(embed=create_embed(current_index))
+    message = await ctx.send(embed=create_embed(current_index))
 
-  # Adicionar reações para navegação
-  await message.add_reaction("⬅️")
-  await message.add_reaction("➡️")
-  await message.add_reaction("❌")
-  await message.add_reaction("🔎")
+    # Adicionar reações para navegação (CORRIGIDO)
+    await message.add_reaction("⬅️")
+    await message.add_reaction("➡️")
+    await message.add_reaction("❌")
+    await message.add_reaction("🔎")
 
-  # Salvar o estado da busca
-  active_searches[message.id] = {
-      "message": message,
-      "results": results,
-      "current_index": current_index,
-      "user_id": ctx.author.id
-  }
+    # Salvar o estado da busca (CORRIGIDO)
+    active_searches[message.id] = {
+        "message": message,
+        "results": results,
+        "current_index": current_index,
+        "user_id": ctx.author.id
+    }
 
-  def check(reaction, user):
-    return (user.id == ctx.author.id
-            and str(reaction.emoji) in ["⬅️", "➡️", "❌", "🔎"]
-            and reaction.message.id == message.id)
+    def check(reaction, user):
+        return (
+            user.id == ctx.author.id and
+            str(reaction.emoji) in ["⬅️", "➡️", "❌", "🔎"] and
+            reaction.message.id == message.id
+        )
 
-  while True:
-    try:
-      reaction, user = await bot.wait_for("reaction_add",
-                                          timeout=120.0,
-                                          check=check)
-
-      if str(reaction.emoji) == "➡️" and active_searches[
-          message.id]["current_index"] < (len(results) - 1) // 5:
-        active_searches[message.id]["current_index"] += 1
-      elif str(reaction.emoji) == "⬅️" and active_searches[
-          message.id]["current_index"] > 0:
-        active_searches[message.id]["current_index"] -= 1
-      elif str(reaction.emoji) == "🔎":
-        await message.remove_reaction(reaction.emoji, user)
-        prompt_message = await ctx.send("Para qual página você quer navegar?")
-
-        def msg_check(m):
-          return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit(
-          )
-
+    while True:
         try:
-          msg = await bot.wait_for("message", timeout=30.0, check=msg_check)
-          page = int(msg.content) - 1
-          await msg.delete()
-          await prompt_message.delete()
-          if 0 <= page <= (len(results) - 1) // 5:
-            active_searches[message.id]["current_index"] = page
-          else:
-            await ctx.send("Página inválida.", delete_after=5)
+            reaction, user = await bot.wait_for("reaction_add",
+                                              timeout=120.0,
+                                              check=check)
+
+            if str(reaction.emoji) == "➡️" and active_searches[
+                message.id]["current_index"] < (len(results) - 1) // 5:
+                active_searches[message.id]["current_index"] += 1
+            elif str(reaction.emoji) == "⬅️" and active_searches[
+                message.id]["current_index"] > 0:
+                active_searches[message.id]["current_index"] -= 1
+            elif str(reaction.emoji) == "🔎":
+                await message.remove_reaction(reaction.emoji, user)
+                prompt_message = await ctx.send("Para qual página você quer navegar?")
+
+                def msg_check(m):
+                    return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit()
+
+                try:
+                    msg = await bot.wait_for("message", timeout=30.0, check=msg_check)
+                    page = int(msg.content) - 1
+                    await msg.delete()
+                    await prompt_message.delete()
+                    if 0 <= page <= (len(results) - 1) // 5:
+                        active_searches[message.id]["current_index"] = page
+                    else:
+                        await ctx.send("Página inválida.", delete_after=5)
+                except asyncio.TimeoutError:
+                    await prompt_message.delete()
+                    await ctx.send("Tempo esgotado para escolher a página.", delete_after=5)
+            elif str(reaction.emoji) == "❌":
+                await message.delete()
+                await ctx.message.delete()
+                del active_searches[message.id]
+                break
+
+            # Atualizar embed
+            current_index = active_searches[message.id]["current_index"]
+            await message.edit(embed=create_embed(current_index))
+            await message.remove_reaction(reaction.emoji, user)
+
         except asyncio.TimeoutError:
-          await prompt_message.delete()
-          await ctx.send("Tempo esgotado para escolher a página.",
-                         delete_after=5)
-      elif str(reaction.emoji) == "❌":
-        await message.delete()
-        await ctx.message.delete()
-        del active_searches[message.id]
-        break
+            await message.clear_reactions()
+            del active_searches[message.id]
+            break
 
-      # Atualizar embed
-      current_index = active_searches[message.id]["current_index"]
-      await message.edit(embed=create_embed(current_index))
-      await message.remove_reaction(reaction.emoji, user)
-
-    except asyncio.TimeoutError:
-      await message.clear_reactions()
-      del active_searches[message.id]
-      break
+# ... (código posterior permanece igual)
 
 
 if __name__ == "__main__":
