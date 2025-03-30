@@ -102,6 +102,7 @@ def parse_ddg_html(html, num_results):
 
 def perform_search(query, num_results=50):
     # Tenta Google
+    google_results = []
     try:
         service = build("customsearch", "v1", developerKey=os.getenv('GOOGLE_API_KEY'))
         # ... (seu código existente do Google)
