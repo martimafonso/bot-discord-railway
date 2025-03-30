@@ -101,29 +101,55 @@ def parse_ddg_html(html, num_results):
     return results
 
 def perform_search(query, num_results=50):
-    # Tenta Google
+    # Tenta Google primeiro
     google_results = []
     try:
-        service = build("customsearch", "v1", developerKey=os.getenv('GOOGLE_API_KEY'))
-        # ... (seu código existente do Google)
-        return results
+        GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+        CUSTOM_SEARCH_ENGINE_ID = os.getenv('CUSTOM_SEARCH_ENGINE_ID')
         
-    except Exception as e:
-        if "Quota exceeded" not in str(e):
-            print(f"Erro crítico no Google: {e}")
-            return []
+        if not GOOGLE_API_KEY or not CUSTOM_SEARCH_ENGINE_ID:
+            raise ValueError("Credenciais do Google faltando")
             
-    # Fallback 1: DuckDuckGo (HTML + JSON)
+        service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+        google_results = []
+        start_index = 1
+        
+        while len(google_results) < num_results:
+            response = service.cse().list(
+                q=query,
+                cx=CUSTOM_SEARCH_ENGINE_ID,
+                num=min(10, num_results - len(google_results)),
+                start=start_index
+            ).execute()
+            
+            items = response.get('items', [])
+            if not items:
+                break
+                
+            google_results.extend(items)
+            start_index += len(items)
+            
+        return google_results
+    
+    except Exception as e:
+        error_msg = str(e)
+        if "Quota exceeded" in error_msg:
+            print("Cota Google excedida. Usando fallback...")
+        else:
+            print(f"Erro crítico no Google: {error_msg[:200]}")
+        
+    # Fallback 1: DuckDuckGo
     ddg_results = duckduckgo_search(query, num_results)
     if ddg_results:
         return ddg_results
         
-    # Fallback 2: SerpAPI (Premium)
+    # Fallback 2: SerpAPI
     serp_results = serpapi_search(query, num_results)
     if serp_results:
         return serp_results
         
-    return []  #Todos os fallbacks falharam
+    # Todos os fallbacks falharam
+    return []
 
 
 @app.route('/', methods=['GET', 'HEAD'])  # Aceita ambos os métodos
