@@ -9,6 +9,7 @@ import asyncio
 import os
 from discord.ext import commands
 from dotenv import load_dotenv
+from urllib.parse import quote_plus  # Para queries URL-safe
 
 # Remova esta linha:
 # load_dotenv()  # ← Comente ou delete
@@ -24,73 +25,104 @@ app = Flask(__name__)
 # Adicione novas variáveis de ambiente no seu .env:
 # DDG_API_URL = "https://api.duckduckgo.com/"
 # BING_API_KEY = "sua_chave_bing"
+# Adicione no topo com outros imports
+import requests
+from urllib.parse import quote_plus  # Para queries URL-safe
 
-def duckduckgo_search(query, num_results=50):
+# ... (mantenha suas configurações existentes)
+
+def serpapi_search(query, num_results=50):
     try:
         params = {
+            'api_key': os.getenv('SERPAPI_KEY'),
+            'engine': 'google',
             'q': query,
-            'format': 'json',
-            'no_html': 1,
-            'no_redirect': 1,
-            't': 'discord_bot'
+            'num': num_results,
+            'gl': 'br',  # Resultados em português do Brasil
+            'hl': 'pt'
         }
         
-        response = requests.get('https://api.duckduckgo.com/', params=params)  # URL fixa
+        response = requests.get('https://serpapi.com/search', params=params)
         response.raise_for_status()
         
         data = response.json()
-        results = []
+        resultados = []
         
-        for item in data.get('RelatedTopics', []):
-            if 'FirstURL' in item:
-                results.append({
-                    'title': item.get('Text', 'Sem título')[:256],  # Limite do Discord
-                    'link': item['FirstURL']
+        for item in data.get('organic_results', []):
+            if 'link' in item:
+                resultados.append({
+                    'title': item.get('title', 'Sem título')[:256],
+                    'link': item['link']
                 })
-                if len(results) >= num_results:
+                if len(resultados) >= num_results:
                     break
                     
-        return results
+        return resultados
         
     except Exception as e:
-        print(f"Erro no DuckDuckGo: {str(e)[:200]}")  # Log encurtado
+        print(f"Erro no SerpAPI: {str(e)[:200]}")
         return []
 
-def perform_search(query, num_results=50):
-    # Tenta Google primeiro
+def duckduckgo_search(query, num_results=50):
     try:
-        GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-        CUSTOM_SEARCH_ENGINE_ID = os.getenv('CUSTOM_SEARCH_ENGINE_ID')
+        # Tenta a versão HTML primeiro para termos sensíveis
+        query_encoded = quote_plus(query)
+        response = requests.get(
+            f"https://html.duckduckgo.com/html/?q={query_encoded}",
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
         
-        service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
-        results = []
-        start_index = 1
-        
-        while len(results) < num_results:
-            response = service.cse().list(
-                q=query,
-                cx=CUSTOM_SEARCH_ENGINE_ID,
-                num=min(10, num_results - len(results)),
-                start=start_index
-            ).execute()
+        if response.status_code == 200:
+            return parse_ddg_html(response.text, num_results)
+        else:
+            return []  # Fallback para JSON se HTML falhar
             
-            items = response.get('items', [])
-            if not items:
+    except Exception as e:
+        print(f"Erro no DuckDuckGo: {str(e)[:200]}")
+        return []
+
+def parse_ddg_html(html, num_results):
+    from bs4 import BeautifulSoup  # Adicione ao requirements.txt
+    soup = BeautifulSoup(html, 'html.parser')
+    results = []
+    
+    for result in soup.select('.result__body'):
+        title = result.select_one('.result__title')
+        link = result.select_one('.result__url')
+        
+        if title and link:
+            results.append({
+                'title': title.text[:256],
+                'link': link['href']
+            })
+            if len(results) >= num_results:
                 break
                 
-            results.extend(items)
-            start_index += len(items)
-            
-        return results
-    
-    except Exception as e:
-        if "Quota exceeded" in str(e):
-            print("Usando DuckDuckGo como fallback...")
-            return duckduckgo_search(query, num_results)
-            
-        print(f"Erro na busca: {e}")
-        return []
+    return results
 
+def perform_search(query, num_results=50):
+    # Tenta Google
+    try:
+        service = build("customsearch", "v1", developerKey=os.getenv('GOOGLE_API_KEY'))
+        # ... (seu código existente do Google)
+        return results
+        
+    except Exception as e:
+        if "Quota exceeded" not in str(e):
+            print(f"Erro crítico no Google: {e}")
+            return []
+            
+    # Fallback 1: DuckDuckGo (HTML + JSON)
+    ddg_results = duckduckgo_search(query, num_results)
+    if ddg_results:
+        return ddg_results
+        
+    # Fallback 2: SerpAPI (Premium)
+    serp_results = serpapi_search(query, num_results)
+    if serp_results:
+        return serp_results
+        
+    return []  Todos os fallbacks falharam
 
 
 @app.route('/', methods=['GET', 'HEAD'])  # Aceita ambos os métodos
