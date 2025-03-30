@@ -122,7 +122,7 @@ def perform_search(query, num_results=50):
     if serp_results:
         return serp_results
         
-    return []  Todos os fallbacks falharam
+    return []  #Todos os fallbacks falharam
 
 
 @app.route('/', methods=['GET', 'HEAD'])  # Aceita ambos os métodos
