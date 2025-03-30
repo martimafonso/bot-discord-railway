@@ -82,19 +82,33 @@ def duckduckgo_search(query, num_results=50):
         return []
 
 def parse_ddg_html(html, num_results):
-    from bs4 import BeautifulSoup  # Adicione ao requirements.txt
+    from bs4 import BeautifulSoup
+    import urllib.parse
+    
     soup = BeautifulSoup(html, 'html.parser')
     results = []
     
     for result in soup.select('.result__body'):
-        title = result.select_one('.result__title')
         link = result.select_one('.result__url')
-        
-        if title and link:
+        if link:
+            # Extrai o link real do parâmetro 'uddg'
+            raw_url = link['href']
+            if 'uddg=' in raw_url:
+                decoded_url = urllib.parse.unquote(raw_url.split('uddg=')[1])
+                if decoded_url.startswith('https://') or decoded_url.startswith('http://'):
+                    final_url = decoded_url.split('&rut=')[0]
+                else:
+                    final_url = f"https:{decoded_url.split('&rut=')[0]}"
+            else:
+                final_url = raw_url
+            
+            title = result.select_one('.result__title').text[:256]
+            
             results.append({
-                'title': title.text[:256],
-                'link': link['href']
+                'title': title,
+                'link': final_url
             })
+            
             if len(results) >= num_results:
                 break
                 
@@ -171,45 +185,49 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
 
-
-# ... (código anterior permanece igual)
-
 @bot.command(name="google")
 async def google(ctx, *, query: str):
     results = perform_search(query, num_results=50)
     
     if not results:
-        await ctx.send("🚨 Todas as fontes de pesquisa falharam ou não retornaram resultados!")
+        await ctx.send("🚨 Todas as fontes de pesquisa falharam!")
         return
 
     current_index = 0
 
-    # Função para criar o embed com base no índice atual (CORRIGIDO)
     def create_embed(index):
         embed = discord.Embed(
-            title=f"Resultados {index * 5 + 1}-{min((index + 1) * 5, len(results))}/{len(results)}",
-            color=discord.Color.blue()
+            title=f"Resultados {index * 5 + 1}-{min((index + 1) * 5, len(results))}",
+            color=0x00ff00
         )
-        for i in range(index * 5, min((index + 1) * 5, len(results))):
-            result = results[i]
-            embed.add_field(name=result['title'], value=result['link'], inline=False)
+        
+        start = index * 5
+        end = start + 5
+        
+        for result in results[start:end]:
+            # Garante que o link começa com http/https
+            link = result['link']
+            if not link.startswith(('http://', 'https://')):
+                link = f"https://{link}"
+            
+            embed.add_field(
+                name=result['title'],
+                value=f"[Link]({link})",
+                inline=False
+            )
+            
         return embed
 
     message = await ctx.send(embed=create_embed(current_index))
-
-    # Adicionar reações para navegação (CORRIGIDO)
-    await message.add_reaction("⬅️")
-    await message.add_reaction("➡️")
-    await message.add_reaction("❌")
-    await message.add_reaction("🔎")
-
-    # Salvar o estado da busca (CORRIGIDO)
+    
+    # Controles de paginação (garanta que active_searches está definido)
     active_searches[message.id] = {
         "message": message,
         "results": results,
         "current_index": current_index,
         "user_id": ctx.author.id
     }
+    
 
     def check(reaction, user):
         return (
