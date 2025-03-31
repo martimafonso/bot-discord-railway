@@ -32,13 +32,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)  # ← Única instância do bot
 
-@bot.command(name="google")
-async def google(ctx, *, query: str):
-    # ... (restante do código do comando)
-
-# Adicione isto logo após a criação do bot
-active_searches = {}  # ← Adicione esta linha
-
 def serpapi_search(query, num_results=50):
     try:
         params = {
