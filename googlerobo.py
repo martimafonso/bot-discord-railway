@@ -17,13 +17,26 @@ from urllib.parse import quote_plus  # Para queries URL-safe
 # Use diretamente os.getenv():
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
+# ... (imports e configurações anteriores)
+
 # Função para manter o bot vivo
 app = Flask(__name__)
 
-# ... (mantenha suas configurações existentes)
+# Dicionário para armazenar pesquisas ativas
+active_searches = {}  # ← Posição correta após o Flask
+
+# ... (restante das funções de pesquisa)
+
+# Configurações do Bot e da API APENAS UMA VEZ
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix=".", intents=intents)  # ← Única instância do bot
+
+@bot.command(name="google")
+async def google(ctx, *, query: str):
+    # ... (restante do código do comando)
 
 # Adicione isto logo após a criação do bot
-bot = commands.Bot(command_prefix=".", intents=intents)
 active_searches = {}  # ← Adicione esta linha
 
 def serpapi_search(query, num_results=50):
