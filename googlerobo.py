@@ -294,7 +294,7 @@ async def google(ctx, *, query: str):
             del active_searches[message.id]
             break
         except KeyError:
-        break  # Caso a mensagem já tenha sido removida
+            break  # Caso a mensagem já tenha sido removida
 
 
 if __name__ == "__main__":
