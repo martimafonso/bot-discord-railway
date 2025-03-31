@@ -20,16 +20,11 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 # Função para manter o bot vivo
 app = Flask(__name__)
 
-# ... (imports e configurações anteriores permanecem iguais)
-
-# Adicione novas variáveis de ambiente no seu .env:
-# DDG_API_URL = "https://api.duckduckgo.com/"
-# BING_API_KEY = "sua_chave_bing"
-# Adicione no topo com outros imports
-import requests
-from urllib.parse import quote_plus  # Para queries URL-safe
-
 # ... (mantenha suas configurações existentes)
+
+# Adicione isto logo após a criação do bot
+bot = commands.Bot(command_prefix=".", intents=intents)
+active_searches = {}  # ← Adicione esta linha
 
 def serpapi_search(query, num_results=50):
     try:
@@ -298,6 +293,8 @@ async def google(ctx, *, query: str):
             await message.clear_reactions()
             del active_searches[message.id]
             break
+        except KeyError:
+        break  # Caso a mensagem já tenha sido removida
 
 
 if __name__ == "__main__":
